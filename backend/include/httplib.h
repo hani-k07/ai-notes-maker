@@ -798,7 +798,7 @@ using DownloadProgress = std::function<bool(size_t current, size_t total)>;
 using UploadProgress = std::function<bool(size_t current, size_t total)>;
 
 // ----------------------------------------------------------------------------
-// httplib::any — type-erased value container (C++11 compatible)
+// httplib::any  type-erased value container (C++11 compatible)
 // On C++17+ builds, thin wrappers around std::any are provided.
 // ----------------------------------------------------------------------------
 
@@ -1295,7 +1295,7 @@ struct Response {
   std::string body;
   std::string location; // Redirect location
 
-  // User-defined context — set by pre-routing/pre-request handlers and read
+  // User-defined context  set by pre-routing/pre-request handlers and read
   // by route handlers to pass arbitrary data (e.g. decoded auth tokens).
   std::map<std::string, any> user_data;
 
@@ -11948,7 +11948,7 @@ Server::process_request(Stream &strm, const std::string &remote_addr,
     return write_response(strm, close_connection, req, res);
   }
 
-  // RFC 9112 §6.3: Reject requests with both a non-zero Content-Length and
+  // RFC 9112 6.3: Reject requests with both a non-zero Content-Length and
   // any Transfer-Encoding to prevent request smuggling. Content-Length: 0 is
   // tolerated for compatibility with existing clients.
   if (req.get_header_value_u64("Content-Length") > 0 &&
@@ -12185,7 +12185,7 @@ Server::process_request(Stream &strm, const std::string &remote_addr,
     if (!detail::read_content(
             strm, req, payload_max_length_, drain_status, nullptr,
             [](const char *, size_t, size_t, size_t) { return true; }, false)) {
-      // Body exceeds payload limit or read error — close the connection
+      // Body exceeds payload limit or read error  close the connection
       // to prevent leftover bytes from being misinterpreted.
       connection_closed = true;
     }

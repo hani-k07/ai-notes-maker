@@ -47,6 +47,11 @@ export const api = {
       body: JSON.stringify({ text, mode, model, stream }),
     });
     if (!res.ok) throw new Error("Enhancement failed");
+
+    if (stream) {
+      return res.body; // Return the ReadableStream
+    }
+
     return res.json();
   },
 

@@ -3,8 +3,12 @@
 
 #include <string>
 #include <vector>
-#include <sqlite3.h>
+#include <stdexcept>
 #include "json.hpp"
+
+extern "C" {
+#include <sqlite3.h>
+}
 
 using json = nlohmann::json;
 
@@ -131,9 +135,9 @@ public:
             const char* sql = "UPDATE notes SET title = ?, content = ?, subject = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
             sqlite3_stmt* stmt;
             if (sqlite3_prepare_v2(db, sql, -1, &stmt, 0) == SQLITE_OK) {
-                sqlite3_bind_text(stmt, 1, title.c_str(), -1, SQLITE_STATIC);
-                sqlite3_bind_text(stmt, 2, content.c_str(), -1, SQLITE_STATIC);
-                sqlite3_bind_text(stmt, 3, subject.c_str(), -1, SQLITE_STATIC);
+                sqlite3_bind_text(stmt, 1, title.c_str(), -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(stmt, 2, content.c_str(), -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(stmt, 3, subject.c_str(), -1, SQLITE_TRANSIENT);
                 sqlite3_bind_int(stmt, 4, id);
                 sqlite3_step(stmt);
                 sqlite3_finalize(stmt);

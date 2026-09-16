@@ -67,11 +67,36 @@ const App = () => {
     setIsLoading(true);
     setError(null);
     setBeforeText(textToEnhance);
+    setSuggestion(""); // Clear previous suggestion for streaming
     const start = performance.now();
 
     try {
-      const data = await api.enhance(textToEnhance, mode);
-      setSuggestion(data.enhanced);
+      const result = await api.enhance(textToEnhance, mode, 'qwen2.5', true);
+
+      const reader = result.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        // Ollama returns ndjson: {"response":"...", "done":false}
+        const lines = chunk.split("\n");
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const json = JSON.parse(line);
+            const content = json.response || "";
+            fullText += content;
+            setSuggestion(fullText);
+          } catch (e) {
+            // Incomplete JSON chunk
+          }
+        }
+      }
+
       setResponseTime(Math.round(performance.now() - start));
     } catch (err) {
       setError(err.message || "Cannot connect to AI Core.");

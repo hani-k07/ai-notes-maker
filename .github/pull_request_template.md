@@ -2,11 +2,11 @@
 Please include a summary of the change and which issue is fixed. Fixes # (issue)
 
 ## Type of Change
-- [ ] 🐛 Bug fix (non-breaking change which fixes an issue)
-- [ ] ✨ New feature (non-breaking change which adds functionality)
-- [ ] 💥 Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] 📝 Documentation update
-- [ ] 🧪 Test addition/fix
+- [ ]  Bug fix (non-breaking change which fixes an issue)
+- [ ]  New feature (non-breaking change which adds functionality)
+- [ ]  Breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ]  Documentation update
+- [ ]  Test addition/fix
 
 ## How Has This Been Tested?
 Please describe the tests that you have run to verify your changes.

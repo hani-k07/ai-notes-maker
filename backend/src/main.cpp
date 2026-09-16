@@ -3,6 +3,7 @@
 #include <chrono>
 #include <iomanip>
 #include <fstream>
+#include <sstream>
 #include "httplib.h"
 #include "json.hpp"
 #include "note_store.hpp"
@@ -10,17 +11,17 @@
 
 using json = nlohmann::json;
 
-enum class LogLevel { DEBUG, INFO, ERROR };
-LogLevel current_log_level = LogLevel::INFO;
+enum class LogLevel { L_DEBUG, L_INFO, L_ERROR };
+LogLevel current_log_level = LogLevel::L_INFO;
 
 void log_msg(LogLevel level, const std::string& msg) {
     if (level < current_log_level) return;
     auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     std::string label;
     switch(level) {
-        case LogLevel::DEBUG: label = "[DEBUG]"; break;
-        case LogLevel::INFO:  label = "[INFO]";  break;
-        case LogLevel::ERROR: label = "[ERROR]"; break;
+        case LogLevel::L_DEBUG: label = "[DEBUG]"; break;
+        case LogLevel::L_INFO:  label = "[INFO]";  break;
+        case LogLevel::L_ERROR: label = "[ERROR]"; break;
     }
     std::cout << std::put_time(std::localtime(&now), "%Y-%m-%d %H:%M:%S ") << label << " " << msg << std::endl;
 }
@@ -29,7 +30,7 @@ void send_error(httplib::Response& res, int status, const std::string& message) 
     res.status = status;
     json err = {{"error", message}, {"status", status}};
     res.set_content(err.dump(), "application/json");
-    log_msg(LogLevel::ERROR, "Response Error " + std::to_string(status) + ": " + message);
+    log_msg(LogLevel::L_ERROR, "Response Error " + std::to_string(status) + ": " + message);
 }
 
 int main() {
@@ -102,7 +103,7 @@ int main() {
             std::string transcript = whisper.transcribe(temp_file);
             json resp = {{"transcript", transcript}, {"status", "success"}};
             res.set_content(resp.dump(), "application/json");
-            log_msg(LogLevel::INFO, "Transcription completed");
+            log_msg(LogLevel::L_INFO, "Transcription completed");
         } catch (const std::exception& e) {
             send_error(res, 500, std::string("Transcription failed: ") + e.what());
         }
@@ -129,10 +130,6 @@ int main() {
     svr.Get(R"(/notes/export/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
         setup_cors(res);
         int id = std::stoi(req.matches[1]);
-
-        // Logic to get note by ID from SQLite
-        // Since get_all_notes is available, we can filter or add a get_note(id) method
-        // For now, let's add get_note to NoteStore
         try {
             json notes = store.get_all_notes();
             json target = nullptr;
@@ -142,18 +139,15 @@ int main() {
                     break;
                 }
             }
-
             if (target == nullptr) {
                 send_error(res, 404, "Note not found");
                 return;
             }
-
             std::string md_content = "# " + target.value("title", "Untitled") + "\n\n";
             md_content += "**Subject:** " + target.value("subject", "General") + "\n";
             md_content += "**Date:** " + target.value("created_at", "") + "\n\n";
             md_content += "--- \n\n";
             md_content += target.value("content", "");
-
             res.set_content(md_content, "text/markdown");
             res.set_header("Content-Disposition", "attachment; filename=\"note_" + std::to_string(id) + ".md\"");
         } catch (...) {
@@ -208,24 +202,19 @@ int main() {
             json data = json::parse(req.body);
             int note_id = data.value("id", -1);
             std::string content = data.value("content", "");
-
             if (note_id == -1 || content.empty()) {
                 send_error(res, 400, "Missing note id or content");
                 return;
             }
-
             httplib::Client cli("localhost", 11434);
             json payload;
             payload["model"] = "qwen2.5";
             payload["prompt"] = "Generate 5 study flashcards from the following text. Format each card as: Q: [Question] | A: [Answer]. One card per line.\n\nText:\n" + content;
             payload["stream"] = false;
-
             auto ollama_res = cli.Post("/api/generate", payload.dump(), "application/json");
             if (ollama_res && ollama_res->status == 200) {
                 json ollama_json = json::parse(ollama_res->body);
                 std::string response = ollama_json.value("response", "");
-
-                // Naive parse: split by line and then by ' | '
                 std::stringstream ss(response);
                 std::string line;
                 int count = 0;
@@ -264,25 +253,20 @@ int main() {
         try {
             if (req.body.empty()) { send_error(res, 400, "Empty request body"); return; }
             if (req.body.size() > 100000) { send_error(res, 413, "Payload too large"); return; }
-
             json incoming_data = json::parse(req.body);
             std::string user_text = incoming_data.value("text", "");
             std::string mode = incoming_data.value("mode", "enhance");
             std::string model = incoming_data.value("model", "qwen2.5");
             bool stream = incoming_data.value("stream", false);
-
             if (user_text.empty()) { send_error(res, 400, "No text provided"); return; }
-
             std::string system_prompt;
             if (mode == "bullet") system_prompt = "Convert these notes into a structured, easy-to-read bulleted list. Use bolding for key terms.";
             else if (mode == "summarize") system_prompt = "Summarize these notes into one powerful, high-level paragraph for quick review.";
             else if (mode == "quiz") system_prompt = "Act as a teacher. Create 3 multiple-choice questions based on these notes to test the student.";
             else if (mode == "simplify") system_prompt = "Explain these notes like I am 5 years old. Use very simple language and analogies.";
             else system_prompt = "Professionaly rewrite and enhance these notes. Use clear headings and academic Markdown formatting.";
-
             httplib::Client cli("localhost", 11434);
             cli.set_read_timeout(120, 0);
-
             json ollama_payload;
             ollama_payload["model"] = model;
             ollama_payload["prompt"] = system_prompt + "\n\nStudent Notes:\n" + user_text;
@@ -311,7 +295,7 @@ int main() {
                     res.set_content(response_data.dump(), "application/json");
                     auto end_time = std::chrono::steady_clock::now();
                     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-                    log_msg(LogLevel::INFO, "Enhance request processed in " + std::to_string(elapsed) + "ms");
+                    log_msg(LogLevel::L_INFO, "Enhance request processed in " + std::to_string(elapsed) + "ms");
                 } else {
                     send_error(res, 502, "Ollama connection lost or failed");
                 }

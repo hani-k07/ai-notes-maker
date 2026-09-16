@@ -39,7 +39,7 @@ void test_note_update() {
 
 void test_note_deletion() {
     std::cout << "Running test_note_deletion..." << std::endl;
-    NoteStore store("test_notes.db");
+    NoteStore store("test_deletion.db");
 
     json note = {{"title", "Delete Me"}, {"content", "Bye"}, {"subject", "S2"}};
     int id = store.save_note(note);
@@ -48,6 +48,7 @@ void test_note_deletion() {
     assert(deleted == true);
 
     json notes = store.get_all_notes();
+    std::cout << "Notes size after deletion: " << notes.size() << std::endl;
     assert(notes.size() == 0);
     std::cout << "PASS" << std::endl;
 }

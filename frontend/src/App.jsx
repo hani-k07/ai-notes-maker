@@ -19,6 +19,7 @@ const App = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const typingTimeoutRef = useRef(null);
+  const saveTimeoutRef = useRef(null);
 
   const health = useOllamaHealth();
   const { isRecording, isTranscribing, setIsTranscribing, startRecording, stopRecording } = useMicRecorder();
@@ -36,19 +37,24 @@ const App = () => {
     loadNotes();
   }, []);
 
-  const handleUpdateNote = async (newContent) => {
+  const handleUpdateNote = (newContent) => {
     if (!activeNote) return;
 
-    const updatedNotes = notes.map(note =>
+    // 1. Optimistic update for instant UI response
+    setNotes(prevNotes => prevNotes.map(note =>
       note.id === activeNoteId ? { ...note, content: newContent } : note
-    );
-    setNotes(updatedNotes);
+    ));
 
-    try {
-      await api.saveNote({ ...activeNote, content: newContent });
-    } catch (err) {
-      setError("Failed to save note to backend.");
-    }
+    // 2. Debounce the backend save to prevent request flooding
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await api.saveNote({ ...activeNote, content: newContent });
+      } catch (err) {
+        setError("Failed to save note to backend.");
+      }
+    }, 1000); // Save 1 second after user stops typing
   };
 
   const handleNewNote = async () => {

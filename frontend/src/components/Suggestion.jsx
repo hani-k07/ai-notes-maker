@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const Suggestion = ({ suggestion, isLoading, error, onAccept, beforeText, speed }) => {
   const [copied, setCopied] = useState(false);
@@ -85,8 +87,10 @@ const Suggestion = ({ suggestion, isLoading, error, onAccept, beforeText, speed 
           </div>
         ) : suggestion ? (
           viewMode === 'result' ? (
-            <div className="text-slate-700 leading-relaxed text-lg font-medium whitespace-pre-wrap animate-in fade-in slide-in-from-bottom-2 duration-500">
-              {suggestion}
+            <div className="prose prose-slate prose-lg max-w-none text-slate-700 leading-relaxed font-medium animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {suggestion}
+              </ReactMarkdown>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-6 animate-in fade-in duration-500">
@@ -98,8 +102,10 @@ const Suggestion = ({ suggestion, isLoading, error, onAccept, beforeText, speed 
               </div>
               <div className="space-y-2">
                 <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Enhanced</span>
-                <div className="p-4 bg-emerald-50/30 rounded-xl border border-emerald-100 text-slate-700 leading-relaxed text-sm whitespace-pre-wrap">
-                  {suggestion}
+                <div className="p-4 bg-emerald-50/30 rounded-xl border border-emerald-100 text-slate-700 leading-relaxed text-sm prose prose-slate max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {suggestion}
+                  </ReactMarkdown>
                 </div>
               </div>
             </div>

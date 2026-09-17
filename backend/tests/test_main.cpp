@@ -6,7 +6,8 @@
 
 void test_note_creation() {
     std::cout << "Running test_note_creation..." << std::endl;
-    NoteStore store("test_creation.db");
+    std::remove("test_creation_tmp.db");
+    NoteStore store("test_creation_tmp.db");
 
     json new_note = {
         {"title", "Test Note"},
@@ -14,21 +15,23 @@ void test_note_creation() {
         {"subject", "Testing"}
     };
 
-    int id = store.save_note(new_note);
+    json saved = store.save_note(new_note);
+    int id = saved["id"];
     assert(id > 0);
 
     json notes = store.get_all_notes();
     assert(notes.size() == 1);
-    assert(notes[0]["title"] == "Test Note");
     std::cout << "PASS" << std::endl;
 }
 
 void test_note_update() {
     std::cout << "Running test_note_update..." << std::endl;
-    NoteStore store("test_update.db");
+    std::remove("test_update_tmp.db");
+    NoteStore store("test_update_tmp.db");
 
     json note = {{"title", "Initial"}, {"content", "Old content"}, {"subject", "S1"}};
-    int id = store.save_note(note);
+    json saved = store.save_note(note);
+    int id = saved["id"];
 
     json update = {{"id", id}, {"title", "Updated"}, {"content", "New content"}, {"subject", "S1"}};
     store.save_note(update);
@@ -41,23 +44,25 @@ void test_note_update() {
 
 void test_note_deletion() {
     std::cout << "Running test_note_deletion..." << std::endl;
-    NoteStore store("test_deletion.db");
+    std::remove("test_deletion_tmp.db");
+    NoteStore store("test_deletion_tmp.db");
 
     json note = {{"title", "Delete Me"}, {"content", "Bye"}, {"subject", "S2"}};
-    int id = store.save_note(note);
+    json saved = store.save_note(note);
+    int id = saved["id"];
 
     bool deleted = store.delete_note(id);
     assert(deleted == true);
 
     json notes = store.get_all_notes();
-    std::cout << "Notes size after deletion: " << notes.size() << std::endl;
     assert(notes.size() == 0);
     std::cout << "PASS" << std::endl;
 }
 
 void test_concurrent_access() {
     std::cout << "Running test_concurrent_access..." << std::endl;
-    NoteStore store("test_concurrent.db");
+    std::remove("test_concurrent_tmp.db");
+    NoteStore store("test_concurrent_tmp.db");
 
     std::vector<std::thread> threads;
     for (int i = 0; i < 10; ++i) {

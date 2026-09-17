@@ -24,7 +24,7 @@ struct Note {
 
 class NoteStore {
     sqlite3* db;
-    std::mutex db_mutex;
+    std::recursive_mutex db_mutex;
 
 public:
     NoteStore(const std::string& db_path) {
@@ -39,7 +39,7 @@ public:
     }
 
     void initialize() {
-        std::lock_guard<std::mutex> lock(db_mutex);
+        std::lock_guard lock(db_mutex);
         const char* sql =
             "CREATE TABLE IF NOT EXISTS notes ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -76,7 +76,7 @@ public:
     }
 
     json get_all_notes() {
-        std::lock_guard<std::mutex> lock(db_mutex);
+        std::lock_guard lock(db_mutex);
         std::vector<Note> notes;
         const char* sql = "SELECT id, title, content, subject, created_at, updated_at FROM notes ORDER BY updated_at DESC";
         sqlite3_stmt* stmt;
@@ -110,7 +110,7 @@ public:
     }
 
     json get_note_by_id(int id) {
-        std::lock_guard<std::mutex> lock(db_mutex);
+        std::lock_guard lock(db_mutex);
         const char* sql = "SELECT id, title, content, subject, created_at, updated_at FROM notes WHERE id = ?";
         sqlite3_stmt* stmt;
         json result = nullptr;
@@ -138,8 +138,8 @@ public:
         return result;
     }
 
-    int save_note(const json& data) {
-        std::lock_guard<std::mutex> lock(db_mutex);
+    json save_note(const json& data) {
+        std::lock_guard lock(db_mutex);
         int id = data.value("id", -1);
         std::string title = data.value("title", "Untitled");
         std::string content = data.value("content", "");
@@ -177,11 +177,11 @@ public:
                 sqlite3_finalize(stmt);
             }
         }
-        return id;
+        return get_note_by_id(id);
     }
 
     bool delete_note(int id) {
-        std::lock_guard<std::mutex> lock(db_mutex);
+        std::lock_guard lock(db_mutex);
         const char* sql = "DELETE FROM notes WHERE id = ?";
         sqlite3_stmt* stmt;
         bool success = false;
@@ -194,7 +194,7 @@ public:
     }
 
     void add_flashcard(int note_id, const std::string& q, const std::string& a) {
-        std::lock_guard<std::mutex> lock(db_mutex);
+        std::lock_guard lock(db_mutex);
         const char* sql = "INSERT INTO flashcards (note_id, question, answer) VALUES (?, ?, ?)";
         sqlite3_stmt* stmt;
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, 0) == SQLITE_OK) {
@@ -207,7 +207,7 @@ public:
     }
 
     json get_flashcards(int note_id) {
-        std::lock_guard<std::mutex> lock(db_mutex);
+        std::lock_guard lock(db_mutex);
         std::vector<json> cards;
         const char* sql = "SELECT id, question, answer, next_review FROM flashcards WHERE note_id = ?";
         sqlite3_stmt* stmt;
@@ -231,7 +231,7 @@ public:
     }
 
     void update_card_review(int card_id, int quality) {
-        std::lock_guard<std::mutex> lock(db_mutex);
+        std::lock_guard lock(db_mutex);
         const char* sql = "UPDATE flashcards SET next_review = datetime('now', '+' || ? || ' days') WHERE id = ?";
         sqlite3_stmt* stmt;
         int interval = (quality < 3) ? 1 : (quality < 5 ? 3 : 7);

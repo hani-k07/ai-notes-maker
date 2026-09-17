@@ -5,6 +5,7 @@ import Suggestion from './components/Suggestion';
 import Sidebar from './components/Sidebar';
 import HealthBanner from './components/HealthBanner';
 import QuizModal from './components/QuizModal';
+import Toast from './components/Toast';
 import { useOllamaHealth } from './hooks/useOllamaHealth';
 import { api, API_URL } from './services/api';
 
@@ -13,10 +14,13 @@ const App = () => {
   const [activeNoteId, setActiveNoteId] = useState(null);
   const activeNote = notes.find(n => n.id === activeNoteId);
 
+  const [models, setModels] = useState([]);
+  const [selectedModel, setSelectedModel] = useState('qwen2.5');
   const [suggestion, setSuggestion] = useState("");
   const [beforeText, setBeforeText] = useState("");
   const [responseTime, setResponseTime] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
   const typingTimeoutRef = useRef(null);
   const saveTimeoutRef = useRef(null);
@@ -33,7 +37,23 @@ const App = () => {
         setError("Failed to load notes from backend.");
       }
     };
+
+    const loadModels = async () => {
+      try {
+        const data = await api.getModels();
+        setModels(data);
+        if (data.length > 0) {
+          // Default to qwen2.5 if available, otherwise use the first available model
+          const defaultModel = data.find(m => m.name.includes('qwen2.5')) || data[0];
+          setSelectedModel(defaultModel.name);
+        }
+      } catch (err) {
+        console.error("Failed to load models:", err);
+      }
+    };
+
     loadNotes();
+    loadModels();
   }, []);
 
   const handleUpdateNote = (newContent) => {
@@ -49,9 +69,12 @@ const App = () => {
 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
+        setIsSaving(true);
         await api.saveNote({ ...activeNote, content: newContent });
       } catch (err) {
         setError("Failed to save note to backend.");
+      } finally {
+        setIsSaving(false);
       }
     }, 1000); // Save 1 second after user stops typing
   };
@@ -65,8 +88,7 @@ const App = () => {
 
     try {
       const savedNote = await api.saveNote(newNote);
-      const updatedNotes = [savedNote, ...notes];
-      setNotes(updatedNotes);
+      setNotes(prev => [savedNote, ...prev]);
       setActiveNoteId(savedNote.id);
       setSuggestion("");
     } catch (err) {
@@ -96,7 +118,7 @@ const App = () => {
     const start = performance.now();
 
     try {
-      const result = await api.enhance(textToEnhance, mode, 'qwen2.5', true);
+      const result = await api.enhance(textToEnhance, mode, selectedModel, true);
 
       const reader = result.getReader();
       const decoder = new TextDecoder();
@@ -110,14 +132,13 @@ const App = () => {
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
 
-        // Keep the last potentially incomplete line in the buffer
         buffer = lines.pop() || "";
 
         for (const line of lines) {
           if (!line.trim()) continue;
           try {
             const json = JSON.parse(line);
-            const content = json.response || "";
+            const content = json.message?.content || json.response || "";
             fullText += content;
             setSuggestion(fullText);
           } catch (e) {
@@ -126,11 +147,10 @@ const App = () => {
         }
       }
 
-      // Process any remaining content in buffer
       if (buffer.trim()) {
         try {
           const json = JSON.parse(buffer);
-          fullText += json.response || "";
+          fullText += json.message?.content || json.response || "";
           setSuggestion(fullText);
         } catch (e) {}
       }
@@ -180,11 +200,42 @@ const App = () => {
     doc.line(margin, cursorY, 190, cursorY);
     cursorY += 10;
 
-    // Content
+    // Content (Simplified Markdown Rendering)
     doc.setTextColor(0);
-    doc.setFontSize(12);
-    const splitText = doc.splitTextToSize(activeNote.content || "No content available.", 170);
-    doc.text(splitText, margin, cursorY);
+    const lines = (activeNote.content || "").split("\n");
+
+    lines.forEach(line => {
+      if (cursorY > 280) {
+        doc.addPage();
+        cursorY = 20;
+      }
+
+      if (line.startsWith("# ")) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(16);
+        doc.text(line.substring(2), margin, cursorY);
+        cursorY += 8;
+      } else if (line.startsWith("## ")) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.text(line.substring(3), margin, cursorY);
+        cursorY += 7;
+      } else if (line.startsWith("- ") || line.startsWith("* ")) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+        const text = line.substring(2);
+        const splitText = doc.splitTextToSize("• " + text, 170);
+        doc.text(splitText, margin, cursorY);
+        cursorY += (splitText.length * 6);
+      } else {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+        const splitText = doc.splitTextToSize(line, 170);
+        doc.text(splitText, margin, cursorY);
+        cursorY += (splitText.length * 6);
+      }
+      cursorY += 2;
+    });
 
     doc.save(`note_${activeNote.id || 'export'}.pdf`);
   };
@@ -192,6 +243,7 @@ const App = () => {
   return (
     <div className="flex flex-col h-screen bg-[#FAFAFA] text-slate-900 font-sans overflow-hidden selection:bg-blue-200">
       <HealthBanner health={health} />
+      {error && <Toast message={error} onClose={() => setError(null)} />}
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
@@ -285,8 +337,17 @@ const App = () => {
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2 text-[10px] font-bold tracking-widest uppercase text-slate-500 bg-white border border-slate-200 px-4 py-2 rounded-full shadow-sm">
                     <span className={`h-2 w-2 rounded-full ${error ? 'bg-red-500' : 'bg-emerald-500'}`}></span>
-                    {error ? 'Offline' : 'Connected'}
+                    {error ? 'Offline' : isSaving ? 'Saving...' : 'Connected'}
                   </div>
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="text-[10px] font-bold tracking-widest uppercase text-slate-600 bg-white border border-slate-200 px-3 py-2 rounded-full shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all cursor-pointer"
+                  >
+                    {models.map(m => (
+                      <option key={m.name} value={m.name}>{m.name}</option>
+                    ))}
+                  </select>
                 </div>
               </header>
 

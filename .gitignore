@@ -1,26 +1,8 @@
-# AI Study Suite Gitignore
-
-# Backend
+*.db
 backend/build/
-backend/*.db
-backend/*.exe
-backend/*.pdb
-backend/*.ilk
-backend/*.tlog
-backend/models/
-
-# Frontend
 frontend/node_modules/
-frontend/dist/
-frontend/.env
-frontend/.env.local
-
-# IDEs
 .vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
+*.exe
+*.out
+*.obj
+*.pdb

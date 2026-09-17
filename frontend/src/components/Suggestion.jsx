@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import PropTypes from 'prop-types';
 
 const Suggestion = ({ suggestion, isLoading, error, onAccept, beforeText, speed }) => {
   const [copied, setCopied] = useState(false);
@@ -89,7 +90,7 @@ const Suggestion = ({ suggestion, isLoading, error, onAccept, beforeText, speed 
           viewMode === 'result' ? (
             <div className="prose prose-slate prose-lg max-w-none text-slate-700 leading-relaxed font-medium animate-in fade-in slide-in-from-bottom-2 duration-500">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {suggestion}
+                {suggestion || ""}
               </ReactMarkdown>
             </div>
           ) : (
@@ -104,7 +105,7 @@ const Suggestion = ({ suggestion, isLoading, error, onAccept, beforeText, speed 
                 <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Enhanced</span>
                 <div className="p-4 bg-emerald-50/30 rounded-xl border border-emerald-100 text-slate-700 leading-relaxed text-sm prose prose-slate max-w-none">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {suggestion}
+                    {suggestion || ""}
                   </ReactMarkdown>
                 </div>
               </div>
@@ -124,3 +125,20 @@ const Suggestion = ({ suggestion, isLoading, error, onAccept, beforeText, speed 
 };
 
 export default Suggestion;
+
+Suggestion.propTypes = {
+  suggestion: PropTypes.string,
+  isLoading: PropTypes.bool,
+  error: PropTypes.string,
+  onAccept: PropTypes.func.isRequired,
+  beforeText: PropTypes.string,
+  speed: PropTypes.number,
+};
+
+Suggestion.defaultProps = {
+  suggestion: '',
+  isLoading: false,
+  error: null,
+  beforeText: '',
+  speed: null,
+};

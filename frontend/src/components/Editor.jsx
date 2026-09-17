@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import PropTypes from 'prop-types';
 
 const Editor = ({ note, setNote, isLoading, onEnhance }) => {
   const [previewMode, setPreviewMode] = useState(false);
@@ -68,3 +69,15 @@ const Editor = ({ note, setNote, isLoading, onEnhance }) => {
 };
 
 export default Editor;
+
+Editor.propTypes = {
+  note: PropTypes.string,
+  setNote: PropTypes.func.isRequired,
+  isLoading: PropTypes.bool,
+  onEnhance: PropTypes.func.isRequired,
+};
+
+Editor.defaultProps = {
+  note: '',
+  isLoading: false,
+};

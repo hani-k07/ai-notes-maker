@@ -41,14 +41,16 @@ const App = () => {
     const loadModels = async () => {
       try {
         const data = await api.getModels();
-        setModels(data);
-        if (data.length > 0) {
+        const modelsArray = Array.isArray(data) ? data : [];
+        setModels(modelsArray);
+        if (modelsArray.length > 0) {
           // Default to qwen2.5 if available, otherwise use the first available model
-          const defaultModel = data.find(m => m.name.includes('qwen2.5')) || data[0];
+          const defaultModel = modelsArray.find(m => m.name && m.name.includes('qwen2.5')) || modelsArray[0];
           setSelectedModel(defaultModel.name);
         }
       } catch (err) {
         console.error("Failed to load models:", err);
+        setModels([]);
       }
     };
 

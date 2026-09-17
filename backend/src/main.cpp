@@ -4,10 +4,14 @@
 #include <iomanip>
 #include <fstream>
 #include <sstream>
+#include <mutex>
+#include <queue>
+#include <condition_variable>
+#include <thread>
+
 #include "httplib.h"
 #include "json.hpp"
 #include "note_store.hpp"
-#include "whisper_client.hpp"
 
 using json = nlohmann::json;
 
@@ -17,13 +21,21 @@ LogLevel current_log_level = LogLevel::L_INFO;
 void log_msg(LogLevel level, const std::string& msg) {
     if (level < current_log_level) return;
     auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+
+    struct tm time_info;
+#ifdef _WIN32
+    localtime_s(&time_info, &now);
+#else
+    localtime_r(&now, &time_info);
+#endif
+
     std::string label;
     switch(level) {
         case LogLevel::L_DEBUG: label = "[DEBUG]"; break;
         case LogLevel::L_INFO:  label = "[INFO]";  break;
         case LogLevel::L_ERROR: label = "[ERROR]"; break;
     }
-    std::cout << std::put_time(std::localtime(&now), "%Y-%m-%d %H:%M:%S ") << label << " [Server] " << msg << std::endl;
+    std::cout << std::put_time(&time_info, "%Y-%m-%d %H:%M:%S ") << label << " [Server] " << msg << std::endl;
 }
 
 void send_error(httplib::Response& res, int status, const std::string& message) {
@@ -36,7 +48,6 @@ void send_error(httplib::Response& res, int status, const std::string& message) 
 int main() {
     httplib::Server svr;
     NoteStore store("ai_notes.db");
-    WhisperClient whisper;
 
     auto setup_cors = [](httplib::Response& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
@@ -52,7 +63,6 @@ int main() {
     svr.Options("/health", options_handler);
     svr.Options("/notes", options_handler);
     svr.Options("/models", options_handler);
-    svr.Options("/transcribe", options_handler);
     svr.Options("/flashcards", options_handler);
 
     // --- Health Check ---
@@ -88,36 +98,7 @@ int main() {
             health_status["status"] = "unhealthy";
             health_status["model_ready"] = false;
         }
-        health_status["whisper"] = whisper.is_available() ? "connected" : "disconnected";
-        if (health_status["whisper"] == "disconnected") health_status["status"] = "degraded";
         res.set_content(health_status.dump(), "application/json");
-    });
-
-    // --- Transcription Endpoint ---
-    svr.Post("/transcribe", [&](const httplib::Request& req, httplib::Response& res) {
-        setup_cors(res);
-        try {
-            if (req.body.empty()) { send_error(res, 400, "Empty audio body"); return; }
-
-            std::string temp_file = "temp_audio.wav";
-            {
-                std::ofstream ofs(temp_file, std::ios::binary);
-                ofs.write(req.body.data(), req.body.size());
-            }
-
-            if (!whisper.is_available()) {
-                send_error(res, 503, "Whisper engine not installed. See README.");
-                return;
-            }
-
-            std::string transcript = whisper.transcribe(temp_file);
-            std::remove(temp_file.c_str());
-            json resp = {{"transcript", transcript}, {"status", "success"}};
-            res.set_content(resp.dump(), "application/json");
-            log_msg(LogLevel::L_INFO, "Transcription completed");
-        } catch (const std::exception& e) {
-            send_error(res, 500, std::string("Transcription failed: ") + e.what());
-        }
     });
 
     // --- Model Listing ---
@@ -148,14 +129,7 @@ int main() {
             return;
         }
         try {
-            json notes = store.get_all_notes();
-            json target = nullptr;
-            for(auto& n : notes) {
-                if(n["id"] == id) {
-                    target = n;
-                    break;
-                }
-            }
+            json target = store.get_note_by_id(id);
             if (target == nullptr) {
                 send_error(res, 404, "Note not found");
                 return;
@@ -290,28 +264,46 @@ int main() {
             else if (mode == "quiz") system_prompt = "Act as a teacher. Create 3 multiple-choice questions based on these notes to test the student.";
             else if (mode == "simplify") system_prompt = "Explain these notes like I am 5 years old. Use very simple language and analogies.";
             else system_prompt = "Professionaly rewrite and enhance these notes. Use clear headings and academic Markdown formatting.";
-            httplib::Client cli("localhost", 11434);
-            cli.set_read_timeout(120, 0);
+            auto cli = std::make_shared<httplib::Client>("localhost", 11434);
+            cli->set_read_timeout(120, 0);
             json ollama_payload;
             ollama_payload["model"] = model;
             ollama_payload["prompt"] = system_prompt + "\n\nStudent Notes:\n" + user_text;
             ollama_payload["stream"] = stream;
 
             if (stream) {
+                auto buffer = std::make_shared<std::pair<std::string, std::mutex>>();
+                auto done = std::make_shared<bool>(false);
+
+                std::thread([cli, ollama_payload, buffer, done]() mutable {
+                    cli->Post("/api/generate", httplib::Headers{}, ollama_payload.dump(), "application/json",
+                        [&](const char* data, size_t data_len) {
+                            std::lock_guard<std::mutex> lock(buffer->second);
+                            buffer->first.append(data, data_len);
+                            return true;
+                        }
+                    );
+                    std::lock_guard<std::mutex> lock(buffer->second);
+                    *done = true;
+                }).detach();
+
                 res.set_content_provider(
                     "application/x-ndjson",
-                    [&](size_t offset, auto& chunk) {
-                        auto ollama_res = cli.Post("/api/generate", httplib::Headers{}, ollama_payload.dump(), "application/json",
-                            [&](const char* data, size_t data_len) {
-                                chunk.write(data, data_len);
-                                return true;
-                            }
-                        );
+                    [buffer, done](size_t offset, auto& chunk) {
+                        std::lock_guard<std::mutex> lock(buffer->second);
+                        if (buffer->first.empty()) {
+                            if (*done) return false;
+                            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                            return true; // Keep trying
+                        }
+                        size_t len = std::min(buffer->first.size(), (size_t)8192);
+                        chunk.write(buffer->first.data(), len);
+                        buffer->first.erase(0, len);
                         return true;
                     }
                 );
             } else {
-                auto ollama_res = cli.Post("/api/generate", ollama_payload.dump(), "application/json");
+                auto ollama_res = cli->Post("/api/generate", ollama_payload.dump(), "application/json");
                 if (ollama_res && ollama_res->status == 200) {
                     json ollama_json = json::parse(ollama_res->body);
                     json response_data;

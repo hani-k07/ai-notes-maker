@@ -16,7 +16,7 @@ function createWindow() {
 
   // In development, load the Vite dev server
   // In production, you would load the built index.html
-  win.loadURL('http://localhost:5173');
+  win.loadURL('http://localhost:5175');
 
   // Optional: Open DevTools if needed for debugging
   // win.webContents.openDevTools();

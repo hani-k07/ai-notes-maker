@@ -1,4 +1,4 @@
-export const API_URL = "http://localhost:8080";
+export const API_URL = "";
 
 export const api = {
   /**
@@ -84,18 +84,4 @@ export const api = {
 
     return res.json();
   },
-
-  /**
-   * Transcribes audio blob to text using whisper.cpp.
-   * @param {Blob} audioBlob - Audio data.
-   * @returns {Promise<Object>} Transcription result.
-   */
-  async transcribe(audioBlob) {
-    const res = await fetch(`${API_URL}/transcribe`, {
-      method: 'POST',
-      body: audioBlob,
-    });
-    if (!res.ok) throw new Error("Transcription failed");
-    return res.json();
-  }
 };

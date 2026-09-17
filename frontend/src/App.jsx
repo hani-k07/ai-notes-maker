@@ -4,7 +4,6 @@ import Suggestion from './components/Suggestion';
 import Sidebar from './components/Sidebar';
 import HealthBanner from './components/HealthBanner';
 import QuizModal from './components/QuizModal';
-import { useMicRecorder } from './hooks/useMicRecorder';
 import { useOllamaHealth } from './hooks/useOllamaHealth';
 import { api, API_URL } from './services/api';
 
@@ -22,7 +21,6 @@ const App = () => {
   const saveTimeoutRef = useRef(null);
 
   const health = useOllamaHealth();
-  const { isRecording, isTranscribing, setIsTranscribing, startRecording, stopRecording } = useMicRecorder();
 
   useEffect(() => {
     const loadNotes = async () => {
@@ -130,40 +128,6 @@ const App = () => {
     }
   };
 
-  const handleTranscribe = async () => {
-    try {
-      setIsTranscribing(true);
-      const audioBlob = await stopRecording();
-      if (!audioBlob) {
-        setIsTranscribing(false);
-        return;
-      }
-
-      const data = await api.transcribe(audioBlob);
-      const newContent = (activeNote?.content || "") + "\n\n" + data.transcript;
-      handleUpdateNote(newContent);
-      fetchEnhancement(data.transcript, 'enhance');
-    } catch (err) {
-      setError(err.message || "Voice transcription failed.");
-    } finally {
-      setIsTranscribing(false);
-    }
-  };
-
-  useEffect(() => {
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-
-    if (activeNote?.content.trim().length > 10) {
-      typingTimeoutRef.current = setTimeout(() => {
-        fetchEnhancement(activeNote.content);
-      }, 1500);
-    } else {
-      setSuggestion("");
-      setError(null);
-    }
-    return () => clearTimeout(typingTimeoutRef.current);
-  }, [activeNote?.content]);
-
   const handleManualEnhance = () => {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     if (activeNote?.content.trim()) fetchEnhancement(activeNote.content);
@@ -246,7 +210,7 @@ const App = () => {
                     <button
                       onClick={() => {
                         if (!activeNoteId) return;
-                        window.open(`${API_URL}/notes/export/${activeNoteId}`, '_blank');
+                        window.open(`http://127.0.0.1:8080/notes/export/${activeNoteId}`, '_blank');
                       }}
                       className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
                       title="Export this note as a Markdown file"
@@ -259,20 +223,6 @@ const App = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <button
-                    onClick={isRecording ? handleTranscribe : startRecording}
-                    disabled={isTranscribing}
-                    aria-label={isRecording ? "Stop and transcribe" : "Start voice recording"}
-                    className={`px-4 py-2 rounded-full font-bold text-[10px] tracking-widest uppercase transition-all flex items-center gap-2 shadow-sm border ${
-                      isRecording
-                      ? 'bg-red-50 border-red-200 text-red-600 animate-pulse'
-                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className={`h-2 w-2 rounded-full ${isRecording ? 'bg-red-600' : 'bg-slate-300'}`}></div>
-                    {isTranscribing ? 'Transcribing...' : isRecording ? 'Stop & Transcribe' : 'Voice Note'}
-                  </button>
-
                   <div className="flex items-center gap-2 text-[10px] font-bold tracking-widest uppercase text-slate-500 bg-white border border-slate-200 px-4 py-2 rounded-full shadow-sm">
                     <span className={`h-2 w-2 rounded-full ${error ? 'bg-red-500' : 'bg-emerald-500'}`}></span>
                     {error ? 'Offline' : 'Connected'}

@@ -63,7 +63,7 @@ public:
             "answer TEXT, "
             "next_review DATETIME DEFAULT CURRENT_TIMESTAMP, "
             "interval INTEGER DEFAULT 1, "
-            "ease FACTOR DEFAULT 2.5, "
+            "ease REAL DEFAULT 2.5, "
             "FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE"
             ");";
 
@@ -107,6 +107,35 @@ public:
             });
         }
         return j;
+    }
+
+    json get_note_by_id(int id) {
+        std::lock_guard<std::mutex> lock(db_mutex);
+        const char* sql = "SELECT id, title, content, subject, created_at, updated_at FROM notes WHERE id = ?";
+        sqlite3_stmt* stmt;
+        json result = nullptr;
+
+        if (sqlite3_prepare_v2(db, sql, -1, &stmt, 0) == SQLITE_OK) {
+            sqlite3_bind_int(stmt, 1, id);
+            if (sqlite3_step(stmt) == SQLITE_ROW) {
+                auto get_text = [](sqlite3_stmt* s, int col) {
+                    const unsigned char* text = sqlite3_column_text(s, col);
+                    return text ? reinterpret_cast<const char*>(text) : "";
+                };
+                result = {
+                    {"id", sqlite3_column_int(stmt, 0)},
+                    {"title", get_text(stmt, 1)},
+                    {"content", get_text(stmt, 2)},
+                    {"subject", get_text(stmt, 3)},
+                    {"created_at", get_text(stmt, 4)},
+                    {"updated_at", get_text(stmt, 5)}
+                };
+            }
+            sqlite3_finalize(stmt);
+        } else {
+            sqlite3_finalize(stmt);
+        }
+        return result;
     }
 
     int save_note(const json& data) {

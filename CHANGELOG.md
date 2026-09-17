@@ -1,19 +1,14 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
-## [1.0.0] - 2026-09-16
+## [1.1.0] - 2026-09-17
 ### Added
-- **Core Backend Hardening**: Server now binds to `127.0.0.1`, includes input validation, and structured JSON error responses.
-- **Persistence Layer**: Integrated SQLite3 for local note storage with automatic versioning.
-- **Voice-to-Note**: Local transcription using `whisper.cpp` integration.
-- **Frontend Polish**: 
-  - Added real-time system health monitoring banner.
-  - Implemented AI Diff/Preview view for transparent rewrites.
-  - Added response latency tracking.
-  - Centralized API services layer.
-- **Developer Experience**: 
-  - Full CI/CD pipeline with GitHub Actions for build and test verification.
-  - Unit tests for C++ backend and Vitest for frontend.
-  - Professional project structure and documentation.
-- **Professional Polish**: Added LICENSE, CONTRIBUTING, and Code of Conduct.
+- Thread-safe SQLite persistence layer.
+- Real-time streaming AI enhancements via NDJSON.
+- Local speech-to-text integration via whisper.cpp.
+- Professional README and documentation.
+
+### Fixed
+- Fixed critical UI-to-Backend disconnection.
+- Resolved memory leak in transcription endpoint.
+- Handled NULL columns in database queries.
+- Added concurrency guards to prevent DB corruption.

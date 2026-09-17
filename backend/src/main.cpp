@@ -23,7 +23,7 @@ void log_msg(LogLevel level, const std::string& msg) {
         case LogLevel::L_INFO:  label = "[INFO]";  break;
         case LogLevel::L_ERROR: label = "[ERROR]"; break;
     }
-    std::cout << std::put_time(std::localtime(&now), "%Y-%m-%d %H:%M:%S ") << label << " " << msg << std::endl;
+    std::cout << std::put_time(std::localtime(&now), "%Y-%m-%d %H:%M:%S ") << label << " [Server] " << msg << std::endl;
 }
 
 void send_error(httplib::Response& res, int status, const std::string& message) {

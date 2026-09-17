@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include <mutex>
 #include "json.hpp"
 
 extern "C" {
@@ -23,6 +24,7 @@ struct Note {
 
 class NoteStore {
     sqlite3* db;
+    std::mutex db_mutex;
 
 public:
     NoteStore(const std::string& db_path) {
@@ -37,6 +39,7 @@ public:
     }
 
     void initialize() {
+        std::lock_guard<std::mutex> lock(db_mutex);
         const char* sql =
             "CREATE TABLE IF NOT EXISTS notes ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -72,21 +75,25 @@ public:
         }
     }
 
-
     json get_all_notes() {
+        std::lock_guard<std::mutex> lock(db_mutex);
         std::vector<Note> notes;
         const char* sql = "SELECT id, title, content, subject, created_at, updated_at FROM notes ORDER BY updated_at DESC";
         sqlite3_stmt* stmt;
 
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, 0) == SQLITE_OK) {
             while (sqlite3_step(stmt) == SQLITE_ROW) {
+                auto get_text = [](sqlite3_stmt* s, int col) {
+                    const unsigned char* text = sqlite3_column_text(s, col);
+                    return text ? reinterpret_cast<const char*>(text) : "";
+                };
                 notes.push_back({
                     sqlite3_column_int(stmt, 0),
-                    (const char*)sqlite3_column_text(stmt, 1),
-                    (const char*)sqlite3_column_text(stmt, 2),
-                    (const char*)sqlite3_column_text(stmt, 3),
-                    (const char*)sqlite3_column_text(stmt, 4),
-                    (const char*)sqlite3_column_text(stmt, 5)
+                    get_text(stmt, 1),
+                    get_text(stmt, 2),
+                    get_text(stmt, 3),
+                    get_text(stmt, 4),
+                    get_text(stmt, 5)
                 });
             }
         }
@@ -103,27 +110,25 @@ public:
     }
 
     int save_note(const json& data) {
+        std::lock_guard<std::mutex> lock(db_mutex);
         int id = data.value("id", -1);
         std::string title = data.value("title", "Untitled");
         std::string content = data.value("content", "");
         std::string subject = data.value("subject", "General");
 
         if (id == -1) {
-            // Create
             const char* sql = "INSERT INTO notes (title, content, subject) VALUES (?, ?, ?)";
             sqlite3_stmt* stmt;
             if (sqlite3_prepare_v2(db, sql, -1, &stmt, 0) == SQLITE_OK) {
-                sqlite3_bind_text(stmt, 1, title.c_str(), -1, SQLITE_STATIC);
-                sqlite3_bind_text(stmt, 2, content.c_str(), -1, SQLITE_STATIC);
-                sqlite3_bind_text(stmt, 3, subject.c_str(), -1, SQLITE_STATIC);
+                sqlite3_bind_text(stmt, 1, title.c_str(), -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(stmt, 2, content.c_str(), -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(stmt, 3, subject.c_str(), -1, SQLITE_TRANSIENT);
                 if (sqlite3_step(stmt) == SQLITE_DONE) {
                     id = (int)sqlite3_last_insert_rowid(db);
                 }
                 sqlite3_finalize(stmt);
             }
         } else {
-            // Update & Versioning
-            // First, save current version to note_versions before updating
             const char* v_sql = "INSERT INTO note_versions (note_id, content) SELECT id, content FROM notes WHERE id = ?";
             sqlite3_stmt* v_stmt;
             if (sqlite3_prepare_v2(db, v_sql, -1, &v_stmt, 0) == SQLITE_OK) {
@@ -147,6 +152,7 @@ public:
     }
 
     bool delete_note(int id) {
+        std::lock_guard<std::mutex> lock(db_mutex);
         const char* sql = "DELETE FROM notes WHERE id = ?";
         sqlite3_stmt* stmt;
         bool success = false;
@@ -159,29 +165,35 @@ public:
     }
 
     void add_flashcard(int note_id, const std::string& q, const std::string& a) {
+        std::lock_guard<std::mutex> lock(db_mutex);
         const char* sql = "INSERT INTO flashcards (note_id, question, answer) VALUES (?, ?, ?)";
         sqlite3_stmt* stmt;
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, 0) == SQLITE_OK) {
             sqlite3_bind_int(stmt, 1, note_id);
-            sqlite3_bind_text(stmt, 2, q.c_str(), -1, SQLITE_STATIC);
-            sqlite3_bind_text(stmt, 3, a.c_str(), -1, SQLITE_STATIC);
+            sqlite3_bind_text(stmt, 2, q.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_bind_text(stmt, 3, a.c_str(), -1, SQLITE_TRANSIENT);
             sqlite3_step(stmt);
             sqlite3_finalize(stmt);
         }
     }
 
     json get_flashcards(int note_id) {
+        std::lock_guard<std::mutex> lock(db_mutex);
         std::vector<json> cards;
         const char* sql = "SELECT id, question, answer, next_review FROM flashcards WHERE note_id = ?";
         sqlite3_stmt* stmt;
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, 0) == SQLITE_OK) {
             sqlite3_bind_int(stmt, 1, note_id);
             while (sqlite3_step(stmt) == SQLITE_ROW) {
+                auto get_text = [](sqlite3_stmt* s, int col) {
+                    const unsigned char* text = sqlite3_column_text(s, col);
+                    return text ? reinterpret_cast<const char*>(text) : "";
+                };
                 cards.push_back({
                     {"id", sqlite3_column_int(stmt, 0)},
-                    {"question", (const char*)sqlite3_column_text(stmt, 1)},
-                    {"answer", (const char*)sqlite3_column_text(stmt, 2)},
-                    {"next_review", (const char*)sqlite3_column_text(stmt, 3)}
+                    {"question", get_text(stmt, 1)},
+                    {"answer", get_text(stmt, 2)},
+                    {"next_review", get_text(stmt, 3)}
                 });
             }
         }
@@ -190,9 +202,7 @@ public:
     }
 
     void update_card_review(int card_id, int quality) {
-        // Simple SM-2 like update
-        // quality: 0-5 (0=forgot, 5=perfect)
-        // In a real app, we'd calculate next_review date here
+        std::lock_guard<std::mutex> lock(db_mutex);
         const char* sql = "UPDATE flashcards SET next_review = datetime('now', '+' || ? || ' days') WHERE id = ?";
         sqlite3_stmt* stmt;
         int interval = (quality < 3) ? 1 : (quality < 5 ? 3 : 7);

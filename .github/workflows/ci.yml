@@ -1,63 +1,46 @@
-name: CI Pipeline
+name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ main, master ]
 
 jobs:
-  backend-ci:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake g++ sqlite3 libsqlite3-dev
+    - name: Set up C++ environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++
 
-      - name: Build Backend
-        run: |
-          cd backend
-          mkdir build
-          cd build
-          cmake ..
-          make
+    - name: Build Backend
+      run: |
+        cd backend
+        mkdir build && cd build
+        cmake ..
+        make
 
-      - name: Run Backend Tests
-        run: |
-          cd backend/build
-          ./backend_tests
+    - name: Run Backend Tests
+      run: |
+        cd backend/build
+        ./backend_tests
 
-  frontend-ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+    - name: Install Frontend Dependencies
+      run: |
+        cd frontend
+        npm install
 
-      - name: Install Dependencies
-        run: |
-          cd frontend
-          npm install
-
-      - name: Lint Frontend
-        run: |
-          cd frontend
-          npm run lint || echo "Linting not configured"
-
-      - name: Run Frontend Tests
-        run: |
-          cd frontend
-          npm test || echo "Tests not configured"
-
-      - name: Build Frontend
-        run: |
-          cd frontend
-          npm run build
+    - name: Build Frontend
+      run: |
+        cd frontend
+        npm run build

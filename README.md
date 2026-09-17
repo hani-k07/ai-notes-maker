@@ -1,5 +1,7 @@
 # AI Study Suite
 
+A privacy-first, offline AI note-taking application that leverages local LLM inference and speech-to-text for secure, on-device study augmentation.
+
 <div align="center">
   <img src="https://img.shields.io/badge/Build-Passing-brightgreen?style=for-the-badge" alt="Build Status">
   <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License">
@@ -7,34 +9,37 @@
   <img src="https://img.shields.io/badge/AI-Ollama%20%7C%20Whisper-orange?style=for-the-badge" alt="AI Engine">
 </div>
 
-**AI Study Suite** is a professional, high-performance note-taking ecosystem designed for students and researchers who prioritize **privacy**, **speed**, and **ownership**. By leveraging a local C++ backend and on-device LLMs, it provides powerful AI augmentation without a single byte of your data ever leaving your machine.
+## Overview
 
----
+AI Study Suite is designed for users who require powerful AI tools without compromising data privacy. The application runs entirely on the local machine, utilizing a C++ backend for high-efficiency orchestration and an on-device LLM (Qwen 2.5 via Ollama) for text generation.
 
-## Why AI Study Suite?
-
-In an era of cloud-based AI, privacy is often traded for convenience. AI Study Suite restores that balance:
-
-- **100% Offline**: No internet connection required. No cloud API keys. No monthly subscriptions.
-- **Zero Data Leakage**: Your notes, voice recordings, and prompts stay on your hardware.
-- **Hyper-Fast**: A specialized C++ backend ensures minimal overhead between you and your local AI.
-- **Free Forever**: Powered by open-weights models (Qwen 2.5) and open-source engines (Ollama, whisper.cpp).
+### Core Engineering Goals
+- **Zero Data Exfiltration**: All processing happens locally. No cloud APIs or internet connectivity are required for core functionality.
+- **Minimal Overhead**: A specialized C++ server manages the lifecycle of notes, handles transcription, and proxies requests to local AI engines.
+- **End-to-End Privacy**: Local SQLite storage ensures total ownership of user data.
 
 ---
 
 ## Key Features
 
-- **Smart Enhance**: Transform messy, fragmented lecture notes into structured, professional study guides with academic Markdown formatting.
-- **Streaming AI**: Experience real-time generation. AI enhancements stream token-by-token directly into your editor for an instant, responsive feel.
-- **Voice-to-Note**: Capture ideas instantly. Record audio and transcribe it locally using `whisper.cpp`, then automatically enhance the result.
-- **Auto-Bullet**: Instantly convert long-form paragraphs into organized, scannable bullet points.
-- **Quiz Mode**: Turn your notes into a self-test. The AI generates multiple-choice questions to verify your understanding.
-- **Simplify**: Stuck on a complex topic? The "Explain Like I'm 5" mode breaks down technical jargon into simple analogies.
-- **Markdown Export**: Seamlessly export your polished notes into professional `.md` files for use in Obsidian, Notion, or other editors.
-- **Transparency Tools**:
-  - **Diff View**: Compare original and enhanced text side-by-side.
-  - **Latency Tracking**: Real-time monitoring of local inference speeds.
-  - **Health Banner**: Instant status of your local AI and Speech engines.
+- **AI Note Enhancement**: Rewrites fragmented notes into structured study guides using academic Markdown.
+- **Real-time Streaming**: Implements NDJSON streaming from the backend to the React UI for an instant, responsive AI experience.
+- **Local Voice-to-Note**: Integrates `whisper.cpp` for local speech-to-text transcription, allowing for seamless audio capture and automatic AI enhancement.
+- **Specialized AI Modes**:
+  - **Auto-Bullet**: Converts long-form text into scannable bullet points.
+  - **Quiz Generation**: Generates multiple-choice questions based on note content to facilitate active recall.
+  - **Simplification**: Uses "Explain Like I'm 5" prompts to break down complex technical jargon.
+- **Persistence & Export**: Local SQLite database for storage with a dedicated Markdown export utility.
+
+---
+
+## Screenshots
+
+*(Add your captures here)*
+- **Main Workspace**: [Capture showing the editor, sidebar, and health banner]
+- **Smart Enhance**: [GIF of text streaming into the suggestion panel]
+- **Quiz Mode**: [Capture of AI-generated multiple-choice questions]
+- **Voice-to-Note**: [GIF of recording audio and seeing the transcription appear]
 
 ---
 
@@ -59,47 +64,46 @@ graph TD
     end
 ```
 
----
-
 ## Tech Stack
 
 | Layer | Technology | Purpose |
 | :--- | :--- | :--- |
-| **Frontend** | React, Vite, Tailwind CSS | Fast, responsive, modern UI |
-| **Backend** | C++ 17, cpp-httplib | High-efficiency networking & orchestration |
-| **Database** | SQLite3 (Amalgamation) | Private, zero-config local persistence |
-| **LLM** | Ollama (Qwen 2.5) | Local reasoning and text generation |
-| **STT** | whisper.cpp | Local speech-to-text transcription |
-| **Data** | nlohmann/json | Seamless C++/JS communication |
-| **CI/CD** | GitHub Actions | Automated build and test verification |
+| **Frontend** | React, Vite, Tailwind CSS | UI/UX and state management |
+| **Backend** | C++ 17, cpp-httplib | Networking and orchestration |
+| **Database** | SQLite3 | Local, file-based persistence |
+| **LLM** | Ollama (Qwen 2.5) | Local reasoning and generation |
+| **STT** | whisper.cpp | Local speech-to-text |
+| **Data** | nlohmann/json | Inter-process communication |
+| **CI/CD** | GitHub Actions | Build and test automation |
 
 ---
 
 ## Installation & Setup
 
-### 1. AI Engine (Ollama)
-1. Download and install [Ollama](https://ollama.com/).
-2. Pull the required model:
-   ```bash
-   ollama run qwen2.5
-   ```
+### 🚀 Quick Start (Desktop App)
+1. **Setup**: Run `./setup_app.bat` to install dependencies and build the core.
+2. **Launch**: Run `./run_app.bat` to start the application.
 
-### 2. Speech Engine (whisper.cpp)
+### Detailed Setup
+
+#### 1. AI Engine (Ollama)
+1. Install [Ollama](https://ollama.com/).
+2. Pull the model: `ollama run qwen2.5`.
+
+#### 2. Speech Engine (whisper.cpp)
 1. Clone and build [whisper.cpp](https://github.com/ggerganov/whisper.cpp).
-2. Place the compiled `main` binary as `whisper` in the `backend/` directory.
-3. Download a model (e.g., `ggml-base.en.bin`) and place it in `backend/models/ggml-base.en.bin`.
+2. Place the `main` binary as `whisper` in the `backend/` directory.
+3. Place the model (e.g., `ggml-base.en.bin`) in `backend/models/ggml-base.en.bin`.
 
-### 3. C++ Backend
+#### 3. C++ Backend
 **Windows (MSVC):**
-1. Open the "Developer Command Prompt for VS 2022".
-2. Run:
-   ```bash
-   cd backend
-   mkdir build && cd build
-   cmake ..
-   cmake --build .
-   Debug\ai_notes_server.exe
-   ```
+```bash
+cd backend
+mkdir build && cd build
+cmake ..
+cmake --build .
+Debug\ai_notes_server.exe
+```
 
 **Linux/macOS:**
 ```bash
@@ -110,7 +114,7 @@ make
 ./ai_notes_server
 ```
 
-### 4. React Frontend
+#### 4. React Frontend
 ```bash
 cd frontend
 npm install
@@ -120,17 +124,13 @@ npm run dev
 ---
 
 ## Roadmap
-
-- [ ] **PDF Export**: Export polished study guides to high-quality PDFs.
-- [ ] **Spaced Repetition**: Turn Quiz Mode into an Anki-style flashcard system.
-- [ ] **Local RAG**: Query across multiple notes using local embeddings.
-- [ ] **Markdown Storage**: Support for portable `.md` file syncing.
-
----
+- [ ] **PDF Export**: Generate high-quality PDFs from study guides.
+- [ ] **Spaced Repetition**: Integration of an Anki-style flashcard system.
+- [ ] **Local RAG**: Local embedding-based search across notes.
+- [ ] **Markdown Sync**: Support for portable `.md` file syncing.
 
 ## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for our development workflow and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community guidelines.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ## License
 Distributed under the MIT License. See `LICENSE` for more information.

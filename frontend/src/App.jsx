@@ -6,18 +6,11 @@ import HealthBanner from './components/HealthBanner';
 import QuizModal from './components/QuizModal';
 import { useMicRecorder } from './hooks/useMicRecorder';
 import { useOllamaHealth } from './hooks/useOllamaHealth';
-import { api } from './services/api';
+import { api, API_URL } from './services/api';
 
 const App = () => {
-  const [notes, setNotes] = useState(() => {
-    const savedNotes = localStorage.getItem("ai-notes-data");
-    if (savedNotes) return JSON.parse(savedNotes);
-    return [
-      { id: 1, title: "Meeting Notes", content: "", subject: "Work", date: new Date().toLocaleDateString() }
-    ];
-  });
-
-  const [activeNoteId, setActiveNoteId] = useState(notes[0]?.id || null);
+  const [notes, setNotes] = useState([]);
+  const [activeNoteId, setActiveNoteId] = useState(null);
   const activeNote = notes.find(n => n.id === activeNoteId);
 
   const [suggestion, setSuggestion] = useState("");
@@ -31,35 +24,62 @@ const App = () => {
   const { isRecording, isTranscribing, setIsTranscribing, startRecording, stopRecording } = useMicRecorder();
 
   useEffect(() => {
-    localStorage.setItem("ai-notes-data", JSON.stringify(notes));
-  }, [notes]);
+    const loadNotes = async () => {
+      try {
+        const data = await api.getNotes();
+        setNotes(data);
+        if (data.length > 0) setActiveNoteId(data[0].id);
+      } catch (err) {
+        setError("Failed to load notes from backend.");
+      }
+    };
+    loadNotes();
+  }, []);
 
-  const handleUpdateNote = (newContent) => {
-    setNotes(notes.map(note =>
+  const handleUpdateNote = async (newContent) => {
+    if (!activeNote) return;
+
+    const updatedNotes = notes.map(note =>
       note.id === activeNoteId ? { ...note, content: newContent } : note
-    ));
+    );
+    setNotes(updatedNotes);
+
+    try {
+      await api.saveNote({ ...activeNote, content: newContent });
+    } catch (err) {
+      setError("Failed to save note to backend.");
+    }
   };
 
-  const handleNewNote = () => {
-    const newId = notes.length > 0 ? Math.max(...notes.map(n => n.id)) + 1 : 1;
+  const handleNewNote = async () => {
     const newNote = {
-      id: newId,
       title: "Untitled",
       content: "",
       subject: "General",
-      date: new Date().toLocaleDateString()
     };
-    setNotes([newNote, ...notes]);
-    setActiveNoteId(newId);
-    setSuggestion("");
+
+    try {
+      const savedNote = await api.saveNote(newNote);
+      const updatedNotes = [savedNote, ...notes];
+      setNotes(updatedNotes);
+      setActiveNoteId(savedNote.id);
+      setSuggestion("");
+    } catch (err) {
+      setError("Failed to create note.");
+    }
   };
 
-  const handleDeleteNote = (idToDelete) => {
-    const updatedNotes = notes.filter(note => note.id !== idToDelete);
-    setNotes(updatedNotes);
-    if (activeNoteId === idToDelete) {
-      setActiveNoteId(updatedNotes.length > 0 ? updatedNotes[0].id : null);
-      setSuggestion("");
+  const handleDeleteNote = async (idToDelete) => {
+    try {
+      await api.deleteNote(idToDelete);
+      const updatedNotes = notes.filter(note => note.id !== idToDelete);
+      setNotes(updatedNotes);
+      if (activeNoteId === idToDelete) {
+        setActiveNoteId(updatedNotes.length > 0 ? updatedNotes[0].id : null);
+        setSuggestion("");
+      }
+    } catch (err) {
+      setError("Failed to delete note.");
     }
   };
 
@@ -67,7 +87,7 @@ const App = () => {
     setIsLoading(true);
     setError(null);
     setBeforeText(textToEnhance);
-    setSuggestion(""); // Clear previous suggestion for streaming
+    setSuggestion("");
     const start = performance.now();
 
     try {
@@ -82,7 +102,6 @@ const App = () => {
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-        // Ollama returns ndjson: {"response":"...", "done":false}
         const lines = chunk.split("\n");
         for (const line of lines) {
           if (!line.trim()) continue;
@@ -186,7 +205,15 @@ const App = () => {
                   <input
                     type="text"
                     value={activeNote?.title || ""}
-                    onChange={(e) => setNotes(notes.map(n => n.id === activeNoteId ? { ...n, title: e.target.value } : n))}
+                    onChange={async (e) => {
+                      const newTitle = e.target.value;
+                      setNotes(notes.map(n => n.id === activeNoteId ? { ...n, title: newTitle } : n));
+                      try {
+                        await api.saveNote({ ...activeNote, title: newTitle });
+                      } catch (err) {
+                        setError("Failed to save title");
+                      }
+                    }}
                     className="text-4xl font-extrabold text-slate-900 bg-transparent outline-none w-full placeholder:text-slate-300 transition-all"
                     placeholder="Note Title"
                     aria-label="Note Title"
@@ -195,13 +222,21 @@ const App = () => {
                     <input
                       type="text"
                       value={activeNote?.subject || ""}
-                      onChange={(e) => setNotes(notes.map(n => n.id === activeNoteId ? { ...n, subject: e.target.value } : n))}
+                      onChange={async (e) => {
+                        const newSubject = e.target.value;
+                        setNotes(notes.map(n => n.id === activeNoteId ? { ...n, subject: newSubject } : n));
+                        try {
+                          await api.saveNote({ ...activeNote, subject: newSubject });
+                        } catch (err) {
+                          setError("Failed to save subject");
+                        }
+                      }}
                       className="text-xs font-bold tracking-wider uppercase text-slate-500 bg-white border border-slate-200 px-3 py-1.5 rounded outline-none w-32 focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all shadow-sm"
                       placeholder="SUBJECT"
                       aria-label="Note Subject"
                     />
                     <div className="h-1 w-1 rounded-full bg-slate-300"></div>
-                    <p className="text-sm font-medium text-slate-500">{activeNote?.date}</p>
+                    <p className="text-sm font-medium text-slate-500">{activeNote?.created_at || activeNote?.date}</p>
                     <button
                       onClick={() => {
                         if (!activeNoteId) return;

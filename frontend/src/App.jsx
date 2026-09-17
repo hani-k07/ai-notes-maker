@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { jsPDF } from 'jspdf';
 import Editor from './components/Editor';
 import Suggestion from './components/Suggestion';
 import Sidebar from './components/Sidebar';
@@ -100,13 +101,18 @@ const App = () => {
       const reader = result.getReader();
       const decoder = new TextDecoder();
       let fullText = "";
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+
+        // Keep the last potentially incomplete line in the buffer
+        buffer = lines.pop() || "";
+
         for (const line of lines) {
           if (!line.trim()) continue;
           try {
@@ -115,9 +121,18 @@ const App = () => {
             fullText += content;
             setSuggestion(fullText);
           } catch (e) {
-            // Incomplete JSON chunk
+            console.error("JSON parse error:", e, "Line:", line);
           }
         }
+      }
+
+      // Process any remaining content in buffer
+      if (buffer.trim()) {
+        try {
+          const json = JSON.parse(buffer);
+          fullText += json.response || "";
+          setSuggestion(fullText);
+        } catch (e) {}
       }
 
       setResponseTime(Math.round(performance.now() - start));
@@ -137,6 +152,41 @@ const App = () => {
     if (!suggestion) return;
     handleUpdateNote(suggestion);
     setSuggestion("");
+  };
+
+  const handleExportPDF = () => {
+    if (!activeNote) return;
+
+    const doc = new jsPDF();
+    const margin = 20;
+    let cursorY = 20;
+
+    // Title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.text(activeNote.title || "Untitled", margin, cursorY);
+    cursorY += 12;
+
+    // Subject & Date
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Subject: ${activeNote.subject || "General"}`, margin, cursorY);
+    doc.text(`Date: ${activeNote.created_at || activeNote.date || "N/A"}`, 190 - 30, cursorY, { align: "right" });
+    cursorY += 6;
+
+    // Horizontal Line
+    doc.setDrawColor(200);
+    doc.line(margin, cursorY, 190, cursorY);
+    cursorY += 10;
+
+    // Content
+    doc.setTextColor(0);
+    doc.setFontSize(12);
+    const splitText = doc.splitTextToSize(activeNote.content || "No content available.", 170);
+    doc.text(splitText, margin, cursorY);
+
+    doc.save(`note_${activeNote.id || 'export'}.pdf`);
   };
 
   return (
@@ -219,6 +269,16 @@ const App = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                       </svg>
                     </button>
+                    <button
+                      onClick={handleExportPDF}
+                      className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                      title="Export this note as a PDF"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.828a2 2 0 00-1.172-1.828l-4.438-4.438a2 2 0 00-2.828 0l-4.438 4.438A2 2 0 005 9.828V19a2 2 0 002 2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 12v6m0 0l-2-2m2 2l2-2" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
 
@@ -234,12 +294,12 @@ const App = () => {
                 <Editor
                   note={activeNote?.content || ""}
                   setNote={handleUpdateNote}
-                  isLoading={isLoading || isTranscribing}
+                  isLoading={isLoading}
                   onEnhance={handleManualEnhance}
                 />
                 <Suggestion
                   suggestion={suggestion}
-                  isLoading={isLoading || isTranscribing}
+                  isLoading={isLoading}
                   error={error}
                   onAccept={handleAcceptSuggestion}
                   beforeText={beforeText}

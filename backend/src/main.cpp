@@ -64,16 +64,25 @@ int main() {
         if (ollama_res && ollama_res->status == 200) {
             health_status["ollama"] = "connected";
             health_status["status"] = "healthy";
-            json tags = json::parse(ollama_res->body);
-            bool model_found = false;
-            for (auto& model : tags["models"]) {
-                if (model["name"].get<std::string>().find("qwen2.5") != std::string::npos) {
-                    model_found = true;
-                    break;
+            try {
+                json tags = json::parse(ollama_res->body);
+                bool model_found = false;
+                if (tags.contains("models") && tags["models"].is_array()) {
+                    for (auto& model : tags["models"]) {
+                        if (model.contains("name") && model["name"].is_string()) {
+                            if (model["name"].get<std::string>().find("qwen2.5") != std::string::npos) {
+                                model_found = true;
+                                break;
+                            }
+                        }
+                    }
                 }
+                health_status["model_ready"] = model_found;
+                if (!model_found) health_status["status"] = "degraded";
+            } catch (...) {
+                health_status["model_ready"] = false;
+                health_status["status"] = "degraded";
             }
-            health_status["model_ready"] = model_found;
-            if (!model_found) health_status["status"] = "degraded";
         } else {
             health_status["ollama"] = "disconnected";
             health_status["status"] = "unhealthy";
@@ -257,15 +266,23 @@ int main() {
     // --- AI Enhance ---
     svr.Post("/enhance", [&](const httplib::Request& req, httplib::Response& res) {
         setup_cors(res);
+        log_msg(LogLevel::L_INFO, "Received enhance request");
         auto start_time = std::chrono::steady_clock::now();
         try {
             if (req.body.empty()) { send_error(res, 400, "Empty request body"); return; }
             if (req.body.size() > 100000) { send_error(res, 413, "Payload too large"); return; }
+
             json incoming_data = json::parse(req.body);
+            if (!incoming_data.is_object()) {
+                send_error(res, 400, "JSON body must be an object");
+                return;
+            }
+
             std::string user_text = incoming_data.value("text", "");
             std::string mode = incoming_data.value("mode", "enhance");
             std::string model = incoming_data.value("model", "qwen2.5");
             bool stream = incoming_data.value("stream", false);
+
             if (user_text.empty()) { send_error(res, 400, "No text provided"); return; }
             std::string system_prompt;
             if (mode == "bullet") system_prompt = "Convert these notes into a structured, easy-to-read bulleted list. Use bolding for key terms.";

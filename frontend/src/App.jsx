@@ -20,7 +20,7 @@ const App = () => {
   const [error, setError] = useState(null);
   const typingTimeoutRef = useRef(null);
 
-  const { health } = useOllamaHealth();
+  const health = useOllamaHealth();
   const { isRecording, isTranscribing, setIsTranscribing, startRecording, stopRecording } = useMicRecorder();
 
   useEffect(() => {

@@ -91,9 +91,10 @@ int main() {
             if (req.body.empty()) { send_error(res, 400, "Empty audio body"); return; }
 
             std::string temp_file = "temp_audio.wav";
-            std::ofstream ofs(temp_file, std::ios::binary);
-            ofs.write(req.body.data(), req.body.size());
-            ofs.close();
+            {
+                std::ofstream ofs(temp_file, std::ios::binary);
+                ofs.write(req.body.data(), req.body.size());
+            }
 
             if (!whisper.is_available()) {
                 send_error(res, 503, "Whisper engine not installed. See README.");
@@ -101,6 +102,7 @@ int main() {
             }
 
             std::string transcript = whisper.transcribe(temp_file);
+            std::remove(temp_file.c_str());
             json resp = {{"transcript", transcript}, {"status", "success"}};
             res.set_content(resp.dump(), "application/json");
             log_msg(LogLevel::L_INFO, "Transcription completed");
@@ -129,7 +131,13 @@ int main() {
 
     svr.Get(R"(/notes/export/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
         setup_cors(res);
-        int id = std::stoi(req.matches[1]);
+        int id = -1;
+        try {
+            id = std::stoi(req.matches[1]);
+        } catch (...) {
+            send_error(res, 400, "Invalid note ID");
+            return;
+        }
         try {
             json notes = store.get_all_notes();
             json target = nullptr;
@@ -275,16 +283,15 @@ int main() {
             if (stream) {
                 res.set_content_provider(
                     "application/x-ndjson",
-                    [&](auto& chunk) {
-                        auto ollama_res = cli.Post("/api/generate", ollama_payload.dump(), "application/json",
+                    [&](size_t offset, auto& chunk) {
+                        auto ollama_res = cli.Post("/api/generate", httplib::Headers{}, ollama_payload.dump(), "application/json",
                             [&](const char* data, size_t data_len) {
                                 chunk.write(data, data_len);
                                 return true;
                             }
                         );
                         return true;
-                    },
-                    -1
+                    }
                 );
             } else {
                 auto ollama_res = cli.Post("/api/generate", ollama_payload.dump(), "application/json");
